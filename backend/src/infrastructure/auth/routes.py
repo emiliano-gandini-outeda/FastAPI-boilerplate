@@ -6,6 +6,7 @@ from crudauth.oauth import OAuthState
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from fastapi.responses import RedirectResponse
 
+from ...modules.common.constants import GENERIC_ERROR_MESSAGE
 from ...modules.user.crud import crud_users
 from ...modules.user.enums import OAuthProvider
 from ..dependencies import AsyncSessionDep, OAuth2FormDep
@@ -17,6 +18,13 @@ from .setup import auth as crud_auth
 logger = get_logger()
 
 router = APIRouter(tags=["Authentication"])
+
+
+def _safe_redirect_path(redirect_uri: str | None) -> str | None:
+    """Allow only relative paths as post-auth redirect targets."""
+    if redirect_uri and redirect_uri.startswith("/") and not redirect_uri.startswith("//"):
+        return redirect_uri
+    return None
 
 
 @router.post(
@@ -153,7 +161,8 @@ async def refresh_csrf_token(
             back to this application's callback endpoint.
 
             An optional redirect_uri can be specified to control where the user
-            is sent after the entire authentication process completes.
+            is sent after the entire authentication process completes. Only
+            relative paths (starting with "/") are accepted.
             """,
     responses={
         200: {"description": "Authorization URL generated successfully"},
@@ -171,7 +180,7 @@ async def oauth_google_login(
         state_obj = OAuthState(
             state=auth_data["state"],
             provider=OAuthProvider.GOOGLE.value,
-            redirect_to=redirect_uri,
+            redirect_to=_safe_redirect_path(redirect_uri),
             code_verifier=auth_data.get("code_verifier"),
         )
         await oauth_state_storage.create(state_obj, session_id=auth_data["state"], expiration=OAUTH_STATE_TTL_SECONDS)
@@ -276,16 +285,14 @@ async def oauth_google_callback(
                 "csrf_token": csrf_token,
             }
 
-        redirect_to = str(state_data.redirect_to) if state_data.redirect_to else "/"
+        redirect_to = _safe_redirect_path(str(state_data.redirect_to) if state_data.redirect_to else None) or "/"
         return RedirectResponse(url=redirect_to, status_code=status.HTTP_302_FOUND)
 
     except Exception as e:
         logger.error(f"Error in Google OAuth callback: {str(e)}", exc_info=True)
 
         if response_format == "json":
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"OAuth authentication failed: {str(e)}"
-            )
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=GENERIC_ERROR_MESSAGE)
 
         return RedirectResponse(
             url=f"/login?error=oauth_error&provider={OAuthProvider.GOOGLE.value}",

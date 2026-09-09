@@ -92,6 +92,34 @@ async def test_oauth_google_login(client: AsyncClient):
 
 
 @pytest.mark.asyncio
+async def test_oauth_google_login_rejects_external_redirect_uri(client: AsyncClient):
+    """Only relative redirect paths are stored in the OAuth state; external URLs are dropped."""
+    mock_provider = MagicMock()
+    mock_provider.get_authorization_url = MagicMock(
+        return_value={
+            "url": "https://accounts.google.com/o/oauth2/v2/auth?dummy=params",
+            "state": "test-state-value",
+            "code_verifier": "test-code-verifier",
+        }
+    )
+    mock_storage = MagicMock()
+    mock_storage.create = AsyncMock(return_value="test-state-value")
+
+    with (
+        patch(f"{ROUTES}.oauth_providers", {"google": mock_provider}),
+        patch(f"{ROUTES}.oauth_state_storage", mock_storage),
+    ):
+        await client.get("/api/v1/auth/oauth/google", params={"redirect_uri": "https://evil.example.com"})
+        assert mock_storage.create.call_args.args[0].redirect_to is None
+
+        await client.get("/api/v1/auth/oauth/google", params={"redirect_uri": "//evil.example.com"})
+        assert mock_storage.create.call_args.args[0].redirect_to is None
+
+        await client.get("/api/v1/auth/oauth/google", params={"redirect_uri": "/dashboard"})
+        assert mock_storage.create.call_args.args[0].redirect_to == "/dashboard"
+
+
+@pytest.mark.asyncio
 async def test_oauth_callback_invalid_state(client: AsyncClient):
     """An unknown state parameter is rejected (302 redirect / 400 for json)."""
     mock_storage = MagicMock()
