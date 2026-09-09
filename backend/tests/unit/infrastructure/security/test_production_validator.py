@@ -28,6 +28,7 @@ class TestProductionSecurityValidator:
             "SESSION_BACKEND": "redis",
             "CORS_ENABLED": True,
             "CORS_ORIGINS": "https://example.com",
+            "CORS_ALLOW_CREDENTIALS": False,
             "DEBUG": False,
             "ENABLE_DOCS_IN_PRODUCTION": False,
             "SESSION_SECURE_COOKIES": True,
@@ -245,7 +246,7 @@ class TestProductionSecurityValidator:
 
     def test_permissive_cors_logs_warning(self, caplog):
         """Test that permissive CORS logs warning."""
-        settings = self.create_mock_settings(CORS_ORIGINS="*")
+        settings = self.create_mock_settings(CORS_ORIGINS="*", CORS_ALLOW_CREDENTIALS=False)
         validator = ProductionSecurityValidator(settings)
 
         validator.validate_production_security()
@@ -254,6 +255,16 @@ class TestProductionSecurityValidator:
         warning_logs = [record for record in caplog.records if record.levelname == "WARNING"]
         cors_warnings = [log for log in warning_logs if "CORS_ORIGINS" in log.message and "allow all origins" in log.message]
         assert len(cors_warnings) > 0
+
+    def test_wildcard_cors_with_credentials_raises_error(self):
+        """Test that CORS_ORIGINS='*' combined with credentials is a critical error."""
+        settings = self.create_mock_settings(CORS_ORIGINS="*", CORS_ALLOW_CREDENTIALS=True)
+        validator = ProductionSecurityValidator(settings)
+
+        with pytest.raises(ProductionSecurityError) as exc_info:
+            validator.validate_production_security()
+
+        assert "CORS_ORIGINS" in str(exc_info.value)
 
     def test_debug_enabled_logs_warning(self, caplog):
         """Test that debug mode enabled logs warning."""

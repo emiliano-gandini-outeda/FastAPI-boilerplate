@@ -200,6 +200,14 @@ class ProductionSecurityValidator:
                 "Set a strong password for production."
             )
 
+        if self._is_cors_wildcard_with_credentials():
+            errors.append(
+                "CORS_ORIGINS is '*' while CORS_ALLOW_CREDENTIALS is true. "
+                "Browsers reject credentialed responses for a wildcard origin, and the "
+                "combination advertises a broken and unsafe configuration. "
+                "Set CORS_ORIGINS to your specific frontend origins."
+            )
+
         return errors
 
     def _validate_warning_security(self) -> None:
@@ -588,6 +596,19 @@ class ProductionSecurityValidator:
             applications should restrict CORS to specific domains.
         """
         return self.settings.CORS_ENABLED and "*" in self.settings.CORS_ORIGINS_LIST
+
+    def _is_cors_wildcard_with_credentials(self) -> bool:
+        """Check if CORS allows all origins together with credentials.
+
+        Returns:
+            True if CORS_ORIGINS is '*' while CORS_ALLOW_CREDENTIALS is true,
+            False otherwise.
+
+        Note:
+            Browsers reject credentialed responses when the allowed origin is a
+            wildcard, so this combination is non-functional as well as unsafe.
+        """
+        return self._is_cors_too_permissive() and self.settings.CORS_ALLOW_CREDENTIALS
 
     def _is_debug_enabled(self) -> bool:
         """Check if debug mode is enabled in production.
