@@ -24,15 +24,14 @@ backend/src/modules/rate_limit/
 └── schemas.py
 ```
 
-The middleware and provider are wired up; the backend is initialized in the app's lifespan. **Enforcement is opt-in per route** — see below.
+The middleware and provider are wired up; the backend is initialized in the app's lifespan. **Enforcement happens in `RateLimiterMiddleware`** — when `RATE_LIMITER_ENABLED=true`, every request is checked before it reaches a route.
 
 ## How a Request Flows Through It
 
-1. **Request arrives**, `RateLimiterMiddleware` is on the stack but **does not enforce limits** — it only attaches `X-RateLimit-*` headers to the response after the handler runs.
-2. **The route's `Depends(check_rate_limit)` runs.** This is the actual enforcement point. Without this dependency on a route, no limit is checked.
-3. **`check_rate_limit` extracts the user** from `request.state.user` (or falls back to client IP for anonymous requests), looks up the user's tier and the matching rate-limit row from the database, and computes `(limit, period)`.
-4. **`increment_and_check`** atomically increments the counter at `ratelimit:{user_or_ip}:{sanitized_path}` and returns `(count, is_limited)`. The TTL on the key is set on first increment to `period` seconds.
-5. **If `is_limited`**, raises `RateLimitException` (HTTP 429). Otherwise, sets `request.state.rate_limit_headers` so the middleware can attach them to the response.
+1. **Request arrives**, `RateLimiterMiddleware.dispatch` runs `check_rate_limit` before forwarding the request. If the limit is exceeded, the middleware short-circuits with a 429 (`RateLimitException`) response.
+2. **`check_rate_limit` extracts the user** from `request.state.user` (or falls back to client IP for anonymous requests), looks up the user's tier and the matching rate-limit row from the database, and computes `(limit, period)`.
+3. **`increment_and_check`** atomically increments the counter at `ratelimit:{user_or_ip}:{sanitized_path}` and returns `(count, is_limited)`. The TTL on the key is set on first increment to `period` seconds.
+4. **If `is_limited`**, raises `RateLimitException` (HTTP 429). Otherwise, sets `request.state.rate_limit_headers` so the middleware can attach them to the response.
 
 The key shape (no window suffix — the TTL handles the window):
 
@@ -40,9 +39,11 @@ The key shape (no window suffix — the TTL handles the window):
 ratelimit:{user_id_or_ip}:{sanitized_path}
 ```
 
-## Enabling Enforcement on a Route
+## Enabling Enforcement
 
-Add the dependency:
+With `RATE_LIMITER_ENABLED=true` (the default), `RateLimiterMiddleware` enforces limits on **every** request automatically — anonymous requests are keyed by client IP and path with the default limit (`DEFAULT_RATE_LIMIT_LIMIT` per `DEFAULT_RATE_LIMIT_PERIOD`).
+
+The `check_rate_limit` dependency is also exported if you want to apply the check manually at the route layer (it is what the middleware calls internally):
 
 ```python
 from fastapi import APIRouter, Depends
@@ -55,16 +56,10 @@ router = APIRouter()
 async def create_widget(...): ...
 ```
 
-Or apply it to every route in a router:
+Applying the dependency in addition to the middleware means the check runs twice for that request, so it's usually unnecessary.
 
-```python
-router = APIRouter(dependencies=[Depends(check_rate_limit)])
-```
-
-That's all that's required — provided the rate limiter is enabled (`RATE_LIMITER_ENABLED=true`), every request to that route is checked.
-
-!!! warning "Currently no built-in route uses `check_rate_limit`"
-    The boilerplate's shipped routes (`/api/v1/users`, `/api/v1/auth`, `/api/v1/tiers`, `/api/v1/rate-limits`, `/api/v1/api-keys`) do **not** apply `check_rate_limit` by default. You add the dependency where you want enforcement. The middleware will still attach `X-RateLimit-*` headers, but only when something has populated `request.state.rate_limit_headers` — which only happens after `check_rate_limit` has run.
+!!! warning "Set sensible defaults"
+    Because the middleware checks every request, `DEFAULT_RATE_LIMIT_LIMIT` / `DEFAULT_RATE_LIMIT_PERIOD` apply to all anonymous traffic (keyed by IP + path). Lower them deliberately, or disable the limiter in tests with `RATE_LIMITER_ENABLED=false`.
 
 ## Configuration
 

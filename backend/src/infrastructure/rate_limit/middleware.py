@@ -4,7 +4,7 @@ from typing import Any, cast
 from fastapi import Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import Response
+from starlette.responses import JSONResponse, Response
 
 from ...modules.common.utils.logger import get_logger
 from ...modules.rate_limit.crud import crud_rate_limits
@@ -13,6 +13,7 @@ from ...modules.tier.crud import crud_tiers
 from ...modules.tier.schemas import TierSelect
 from ..config import get_settings
 from ..database import async_session
+from ..database.session import local_session
 from .exceptions import RateLimitException
 from .provider import increment_and_check
 from .utils import sanitize_path
@@ -135,13 +136,28 @@ class RateLimiterMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
         """Process a request through the middleware.
 
+        Enforces the configured rate limit for the request before forwarding it,
+        then copies any rate limit headers onto the response.
+
         Args:
             request: The incoming request.
             call_next: The next middleware or handler in the chain.
 
         Returns:
-            The response from the next middleware or handler.
+            The response from the next middleware or handler, or a 429 response
+            if the rate limit is exceeded.
         """
+        user = await get_optional_user(request)
+        try:
+            async with local_session() as db:
+                await _check_rate_limit(request, db, user)
+        except RateLimitException as e:
+            return JSONResponse(
+                status_code=e.status_code,
+                content={"detail": e.detail},
+                headers=dict(e.headers or {}),
+            )
+
         response = await call_next(request)
 
         if hasattr(request.state, "rate_limit_headers"):

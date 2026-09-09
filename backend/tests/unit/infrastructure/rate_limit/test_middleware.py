@@ -187,7 +187,8 @@ async def test_rate_limiter_middleware(mock_request, mock_response, mock_app):
         "X-RateLimit-Reset": "60",
     }
 
-    response = await middleware.dispatch(mock_request, next_handler)
+    with patch("src.infrastructure.rate_limit.middleware._check_rate_limit", new=AsyncMock()):
+        response = await middleware.dispatch(mock_request, next_handler)
 
     assert response.headers["X-RateLimit-Limit"] == "10"
     assert response.headers["X-RateLimit-Remaining"] == "5"
@@ -205,6 +206,40 @@ async def test_rate_limiter_middleware_no_headers(mock_request, mock_response, m
     if hasattr(mock_request.state, "rate_limit_headers"):
         delattr(mock_request.state, "rate_limit_headers")
 
-    response = await middleware.dispatch(mock_request, next_handler)
+    with patch("src.infrastructure.rate_limit.middleware._check_rate_limit", new=AsyncMock()):
+        response = await middleware.dispatch(mock_request, next_handler)
 
     assert len(response.headers) == 0
+
+
+@pytest.mark.asyncio
+async def test_rate_limiter_middleware_enforces_limit(mock_request, mock_response, mock_app):
+    """Test that dispatch returns 429 when the rate limit is exceeded."""
+    middleware = RateLimiterMiddleware(app=mock_app)
+
+    async def next_handler(request):
+        return mock_response
+
+    with patch(
+        "src.infrastructure.rate_limit.middleware._check_rate_limit",
+        new=AsyncMock(side_effect=RateLimitException("Rate limit exceeded. Try again in 60 seconds.")),
+    ):
+        response = await middleware.dispatch(mock_request, next_handler)
+
+    assert response.status_code == 429
+    assert response.headers["Retry-After"] == "60"
+
+
+@pytest.mark.asyncio
+async def test_rate_limiter_middleware_calls_check(mock_request, mock_response, mock_app):
+    """Test that dispatch enforces the rate limit check before forwarding."""
+    middleware = RateLimiterMiddleware(app=mock_app)
+
+    async def next_handler(request):
+        return mock_response
+
+    check = AsyncMock()
+    with patch("src.infrastructure.rate_limit.middleware._check_rate_limit", new=check):
+        await middleware.dispatch(mock_request, next_handler)
+
+    check.assert_called_once()
