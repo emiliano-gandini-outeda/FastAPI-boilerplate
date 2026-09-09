@@ -113,6 +113,26 @@ def test_map_exception_insufficient_credits_preserves_detail():
     assert "50 more credits" in http_exc.detail
 
 
+def test_map_exception_prefers_specific_subclass_mapping():
+    """Subclasses of ResourceNotFoundError must use their own mapping, not the parent's."""
+    from src.modules.common.exceptions import RateLimitNotFoundError, TierNotFoundError, UserNotFoundError
+
+    assert map_exception(UserNotFoundError("nope")).detail == "User not found."
+    assert map_exception(TierNotFoundError("nope")).detail == "The requested tier was not found."
+    assert map_exception(RateLimitNotFoundError("nope")).detail == "Rate limit configuration not found."
+    # The base class itself still uses the generic not-found mapping
+    assert map_exception(ResourceNotFoundError("nope")).detail == "The requested resource was not found."
+
+
+def test_map_exception_user_exists_uses_specific_mapping():
+    """UserExistsError must not fall through to the generic ResourceExistsError mapping."""
+    from src.modules.common.exceptions import UserExistsError
+
+    http_exc = map_exception(UserExistsError(""))
+    assert http_exc.status_code == 422
+    assert http_exc.detail == "A user with this email or username already exists."
+
+
 def test_handle_exception_returns_generic_for_domain_errors():
     """handle_exception (used by routes) must also return generic messages."""
     exc = ResourceNotFoundError("Payment record #123 not found in DB")
