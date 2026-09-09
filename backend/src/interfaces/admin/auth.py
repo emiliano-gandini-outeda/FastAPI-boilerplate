@@ -1,5 +1,7 @@
 """Authentication backend for SQLAdmin."""
 
+import hmac
+
 from sqladmin.authentication import AuthenticationBackend
 from starlette.requests import Request
 
@@ -17,7 +19,15 @@ class AdminAuth(AuthenticationBackend):
 
         settings = get_settings()
 
-        if username == settings.ADMIN_USERNAME and password == settings.ADMIN_PASSWORD:
+        if not settings.ADMIN_USERNAME or not settings.ADMIN_PASSWORD:
+            return False
+
+        username = str(username or "")
+        password = str(password or "")
+
+        if hmac.compare_digest(username, settings.ADMIN_USERNAME) and hmac.compare_digest(
+            password, settings.ADMIN_PASSWORD
+        ):
             request.session.update({"admin_authenticated": True})
             return True
 

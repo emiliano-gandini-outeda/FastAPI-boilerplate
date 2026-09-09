@@ -200,6 +200,13 @@ class ProductionSecurityValidator:
                 "Set a strong password for production."
             )
 
+        if self.settings.ADMIN_ENABLED and (not self.settings.ADMIN_USERNAME or not self.settings.ADMIN_PASSWORD):
+            errors.append(
+                "Admin interface is enabled (ADMIN_ENABLED=true) but ADMIN_USERNAME and/or "
+                "ADMIN_PASSWORD are not set. Set both to strong, unique values or set "
+                "ADMIN_ENABLED=false for production."
+            )
+
         return errors
 
     def _validate_warning_security(self) -> None:
