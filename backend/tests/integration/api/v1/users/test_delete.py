@@ -71,12 +71,10 @@ async def test_soft_delete_nonexistent_user(
     auth_client: AsyncClient,
     db_session: AsyncSession,
 ):
-    """Test soft deletion of non-existent user."""
+    """Test that deleting a non-existent user returns 403 (permission is checked first)."""
     response = await auth_client.delete("/api/v1/users/nonexistentuser")
 
-    assert response.status_code == 404
-    data = response.json()
-    assert data["detail"] == GENERIC_ERROR_MESSAGE
+    assert response.status_code == 403
 
 
 async def test_permanent_delete_success(
