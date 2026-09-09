@@ -1,9 +1,12 @@
 from typing import Any
 
 from fastcrud.types import GetMultiResponseDict
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..common.exceptions import PermissionDeniedError, ResourceExistsError, TierNotFoundError
+from ..rate_limit.models import RateLimit
+from ..user.models import User
 from .crud import crud_tiers
 from .schemas import (
     TierCreate,
@@ -71,10 +74,25 @@ class TierService:
         await crud_tiers.delete(db=db, name=name)
 
     async def permanent_delete(self, name: str, db: AsyncSession) -> None:
-        """Permanently delete a tier."""
+        """Permanently delete a tier.
+
+        Raises:
+            TierNotFoundError: If no tier with the given name exists.
+            ResourceExistsError: If users or rate limits still reference the tier.
+        """
         existing_tier = await crud_tiers.get(db=db, name=name, schema_to_select=TierRead)
         if not existing_tier:
             raise TierNotFoundError(f"Tier with name '{name}' not found")
+
+        tier_id = existing_tier["id"]
+        user_count = await db.scalar(select(func.count(User.id)).where(User.tier_id == tier_id))
+        rate_limit_count = await db.scalar(select(func.count(RateLimit.id)).where(RateLimit.tier_id == tier_id))
+        if user_count or rate_limit_count:
+            raise ResourceExistsError(
+                f"Cannot delete tier '{name}': {user_count or 0} users and "
+                f"{rate_limit_count or 0} rate limits are associated with it"
+            )
+
         await crud_tiers.db_delete(db=db, name=name)
 
     async def verify_superuser(self, user: dict[str, Any], action: str = "manage tiers") -> None:
