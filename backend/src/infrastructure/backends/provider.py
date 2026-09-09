@@ -4,9 +4,15 @@ Shared by the cache and rate limiter providers, which differ only in the
 backend contract they store and the exception they raise for missing backends.
 """
 
-from typing import Generic, NoReturn, TypeVar
+from typing import Generic, NoReturn, Protocol, TypeVar, runtime_checkable
 
-BackendT = TypeVar("BackendT")
+
+@runtime_checkable
+class Pingable(Protocol):
+    async def ping(self) -> bool: ...
+
+
+BackendT = TypeVar("BackendT", bound=Pingable)
 
 
 class BackendProvider(Generic[BackendT]):

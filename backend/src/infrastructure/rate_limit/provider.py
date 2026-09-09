@@ -39,7 +39,7 @@ class RateLimiterProvider(BackendProvider[RateLimiterBackend]):
 
     def _raise_not_found(self, name: str | None, *, for_default: bool = False) -> NoReturn:
         if for_default:
-            raise BackendNotFoundError(name)
+            raise BackendNotFoundError(name or "default")
         raise BackendNotFoundError(name or "default")
 
 
