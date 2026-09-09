@@ -70,7 +70,6 @@ class UserCreate(UserBase):
         str,
         Field(
             min_length=8,
-            pattern=r"^.{8,}|[0-9]+|[A-Z]+|[a-z]+|[^a-zA-Z0-9]+$",
             examples=["Str1ngst!"],
         ),
     ]
@@ -79,6 +78,8 @@ class UserCreate(UserBase):
     github_id: str | None = None
     oauth_provider: str | None = None
 ```
+
+A `field_validator` on `password` enforces the full policy — at least 8 characters, a number, an uppercase letter, a lowercase letter, and a special character — and the validation error lists every requirement that is missing.
 
 `extra="forbid"` rejects any unknown fields the client tries to send — useful to keep clients honest.
 
