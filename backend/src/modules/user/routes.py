@@ -3,7 +3,6 @@ from typing import Any
 from fastapi import APIRouter
 from fastcrud import PaginatedListResponse, compute_offset, paginated_response
 
-from ...infrastructure.auth.http_exceptions import HTTPException
 from ...infrastructure.dependencies import (
     AsyncSessionDep,
     CurrentSuperUserDep,
@@ -131,8 +130,6 @@ async def get_user_by_username(
 ) -> dict[str, Any]:
     """Get user profile by username."""
     user = await user_service.get_by_username(username, db)
-    if user is None:
-        raise HTTPException(status_code=404, detail=f"User with username {username} not found")
     return user
 
 
@@ -163,10 +160,7 @@ async def get_active_and_inactive_user_by_username(
     user_service: UserServiceDep,
 ) -> dict[str, Any]:
     """Get active and inactive profile by username."""
-    user = await user_service.get_active_and_inactive_by_username(username, db)
-    if user is None:
-        raise HTTPException(status_code=404, detail=f"User with username {username} not found")
-    return user
+    return await user_service.get_active_and_inactive_by_username(username, db)
 
 
 @router.patch(
@@ -205,8 +199,6 @@ async def update_user_profile(
     """Update user profile information."""
     await user_service.verify_user_permission(current_user, username, "update profile")
     user = await user_service.get_by_username(username, db)
-    if user is None:
-        raise HTTPException(status_code=404, detail=f"User with username {username} not found")
 
     await user_service.update(user["id"], values, db)
     return {"message": "User updated successfully"}
@@ -243,11 +235,9 @@ async def delete_user_account(
     user_service: UserServiceDep,
 ) -> dict[str, str]:
     """Soft delete a user account."""
-    user = await user_service.get_by_username(username, db)
-    if user is None:
-        raise HTTPException(status_code=404, detail=f"User with username {username} not found")
-
     await user_service.verify_user_permission(current_user, username, "delete this account")
+    user = await user_service.get_by_username(username, db)
+
     await user_service.delete(user["id"], db)
     return {"message": "User account deactivated"}
 
@@ -295,8 +285,6 @@ async def gdpr_delete_user(
 ) -> dict[str, str]:
     """GDPR compliant user anonymization (admin only)."""
     user = await user_service.get_active_and_inactive_by_username(username, db)
-    if user is None:
-        raise HTTPException(status_code=404, detail=f"User with username {username} not found")
     await user_service.anonymize_user(user["id"], db)
     return {"message": "User data anonymized in compliance with GDPR"}
 
@@ -334,8 +322,6 @@ async def get_user_rate_limits(
     """Get rate limits for a user."""
     await user_service.verify_user_permission(current_user, username, "view rate limits")
     user = await user_service.get_by_username(username, db)
-    if user is None:
-        raise HTTPException(status_code=404, detail=f"User with username {username} not found")
     return await user_service.get_rate_limits(user["id"], db)
 
 
@@ -373,8 +359,6 @@ async def get_user_tier(
     await user_service.verify_user_permission(current_user, username, "view tier information")
 
     user = await user_service.get_by_username(username, db)
-    if user is None:
-        raise HTTPException(status_code=404, detail=f"User with username {username} not found")
     return await user_service.get_user_with_tier(user["id"], db)
 
 
@@ -410,7 +394,5 @@ async def update_user_tier(
 ) -> dict[str, str]:
     """Update a user's subscription tier (admin only)."""
     user = await user_service.get_by_username(username, db)
-    if user is None:
-        raise HTTPException(status_code=404, detail=f"User with username {username} not found")
     await user_service.update_tier(user["id"], values, db)
     return {"message": "User tier updated successfully"}
