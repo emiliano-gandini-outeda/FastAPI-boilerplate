@@ -9,13 +9,9 @@ except ImportError:
         "Please install it with 'pip install aiomcache' or 'pip install -e \".[memcached]\"'"
     )
 
-from pydantic import BaseModel
-
-from ...config.settings import get_settings
+from ...backends import MemcachedSettings
 from ..base import CacheBackend
 from ..exceptions import CacheException
-
-settings = get_settings()
 
 
 class PatternMatchingNotSupportedError(CacheException):
@@ -24,26 +20,6 @@ class PatternMatchingNotSupportedError(CacheException):
     def __init__(self, pattern: str):
         self.message = f"Memcached doesn't support pattern-based deletion. Pattern '{pattern}' cannot be used."
         super().__init__(self.message)
-
-
-class MemcachedSettings(BaseModel):
-    """Settings for Memcached connection.
-
-    This class defines the configuration for connecting to a Memcached server.
-
-    Attributes:
-        host: Memcached server hostname. Default is "localhost".
-        port: Memcached server port. Default is 11211.
-        pool_size: Maximum number of connections in the pool. Default is 10.
-        connect_timeout: Connection timeout in seconds. Default is 5.
-            Note: This parameter is not currently used by aiomcache.Client but is
-            kept for API consistency with other cache backends.
-    """
-
-    host: str = "localhost"
-    port: int = 11211
-    pool_size: int = 10
-    connect_timeout: int = 5
 
 
 class MemcachedBackend(CacheBackend):

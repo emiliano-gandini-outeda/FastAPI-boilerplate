@@ -6,7 +6,7 @@ from pydantic import Field
 from pydantic_settings import BaseSettings
 from starlette.config import Config
 
-from .enums import CacheBackend, LogFormat, LogLevel, SessionBackend, TaskiqBrokerType
+from .enums import CacheBackendType, LogFormat, LogLevel, SessionBackend, TaskiqBrokerType
 
 logger = logging.getLogger(__name__)
 
@@ -112,7 +112,7 @@ class CacheSettings(BaseSettings):
     """
 
     CACHE_ENABLED: bool = config("CACHE_ENABLED", default=True, cast=bool)
-    CACHE_BACKEND: str = config("CACHE_BACKEND", default=CacheBackend.MEMCACHED.value)
+    CACHE_BACKEND: str = config("CACHE_BACKEND", default=CacheBackendType.MEMCACHED.value)
 
     CACHE_MEMCACHED_HOST: str = config("CACHE_MEMCACHED_HOST", default="localhost")
     CACHE_MEMCACHED_PORT: int = config("CACHE_MEMCACHED_PORT", default=11211, cast=int)
@@ -162,7 +162,7 @@ class RateLimiterSettings(BaseSettings):
     """
 
     RATE_LIMITER_ENABLED: bool = config("RATE_LIMITER_ENABLED", default=True, cast=bool)
-    RATE_LIMITER_BACKEND: str = config("RATE_LIMITER_BACKEND", default=CacheBackend.MEMCACHED.value)
+    RATE_LIMITER_BACKEND: str = config("RATE_LIMITER_BACKEND", default=CacheBackendType.MEMCACHED.value)
     RATE_LIMITER_FAIL_OPEN: bool = config("RATE_LIMITER_FAIL_OPEN", default=True, cast=bool)
 
     DEFAULT_RATE_LIMIT_LIMIT: int = config("DEFAULT_RATE_LIMIT_LIMIT", default=100, cast=int)

@@ -217,7 +217,7 @@ class StorageSettings(BaseSettings):
     STORAGE_BACKEND: str = config("STORAGE_BACKEND", default=StorageBackend.LOCAL.value)
 ```
 
-The boilerplate already does this for `CacheBackend`, `LogFormat`, `LogLevel`, `SessionBackend`, `TaskiqBrokerType`, and `EnvironmentOption`.
+The boilerplate already does this for `CacheBackendType`, `LogFormat`, `LogLevel`, `SessionBackend`, `TaskiqBrokerType`, and `EnvironmentOption`.
 
 ## Removing Built-in Groups
 

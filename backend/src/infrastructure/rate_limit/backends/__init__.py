@@ -3,10 +3,7 @@
 This package contains implementations of rate limiter backends for different storage engines.
 """
 
-import importlib.util
-
-MEMCACHED_INSTALLED = importlib.util.find_spec("aiomcache") is not None
-REDIS_INSTALLED = importlib.util.find_spec("redis") is not None
+from ...backends import MEMCACHED_INSTALLED, REDIS_INSTALLED
 
 if MEMCACHED_INSTALLED:
     from .memcached import MemcachedBackend, MemcachedSettings  # noqa: F401

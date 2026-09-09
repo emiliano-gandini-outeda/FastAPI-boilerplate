@@ -5,10 +5,7 @@ This module contains implementations of various cache backends that follow the
 CacheBackend interface.
 """
 
-from importlib.util import find_spec
-
-MEMCACHED_INSTALLED = find_spec("aiomcache") is not None
-REDIS_INSTALLED = find_spec("redis.asyncio") is not None
+from ...backends import MEMCACHED_INSTALLED, REDIS_INSTALLED
 
 if MEMCACHED_INSTALLED:
     from .memcached import (

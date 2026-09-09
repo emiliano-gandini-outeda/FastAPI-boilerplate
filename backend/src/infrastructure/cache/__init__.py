@@ -1,11 +1,7 @@
-from importlib.util import find_spec
-
+from ..backends import MEMCACHED_INSTALLED, REDIS_INSTALLED
 from .base import CacheBackend
 from .decorator import cache
 from .provider import cache_provider, clear, delete, delete_pattern, exists, get, set
-
-MEMCACHED_INSTALLED = find_spec("aiomcache") is not None
-REDIS_INSTALLED = find_spec("redis.asyncio") is not None
 
 if MEMCACHED_INSTALLED:
     from .backends.memcached import MemcachedBackend, MemcachedSettings

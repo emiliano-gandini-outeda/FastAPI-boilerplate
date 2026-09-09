@@ -1,9 +1,13 @@
 """Module for initializing the cache backends."""
 
-from ..config import CacheBackend
+from ...modules.common.utils.logger import get_logger
+from ..config import CacheBackendType
 from ..config.settings import get_settings
 from . import MEMCACHED_INSTALLED, REDIS_INSTALLED
+from .exceptions import BackendNotFoundError
 from .provider import cache_provider
+
+logger = get_logger(__name__)
 
 if MEMCACHED_INSTALLED:
     from .backends import MemcachedBackend, MemcachedSettings
@@ -23,7 +27,7 @@ async def initialize_cache() -> None:
     if not settings.CACHE_ENABLED:
         return
 
-    if settings.CACHE_BACKEND == CacheBackend.MEMCACHED.value:
+    if settings.CACHE_BACKEND == CacheBackendType.MEMCACHED.value:
         if not MEMCACHED_INSTALLED:
             raise ImportError("The aiomcache package is not installed. Please install it with 'pip install aiomcache'.")
 
@@ -34,9 +38,9 @@ async def initialize_cache() -> None:
             connect_timeout=settings.CACHE_MEMCACHED_CONNECT_TIMEOUT,
         )
         memcached_backend = MemcachedBackend(settings=memcached_settings)
-        cache_provider.register_backend(CacheBackend.MEMCACHED.value, memcached_backend, default=True)
+        cache_provider.register_backend(CacheBackendType.MEMCACHED.value, memcached_backend, default=True)
 
-    elif settings.CACHE_BACKEND == CacheBackend.REDIS.value:
+    elif settings.CACHE_BACKEND == CacheBackendType.REDIS.value:
         if not REDIS_INSTALLED:
             raise ImportError("The redis package is not installed. Please install it with 'pip install redis'.")
 
@@ -49,7 +53,7 @@ async def initialize_cache() -> None:
             pool_size=settings.CACHE_REDIS_POOL_SIZE,
         )
         redis_backend = RedisBackend(settings=redis_settings)
-        cache_provider.register_backend(CacheBackend.REDIS.value, redis_backend, default=True)
+        cache_provider.register_backend(CacheBackendType.REDIS.value, redis_backend, default=True)
 
 
 async def close_cache() -> None:
@@ -62,12 +66,20 @@ async def close_cache() -> None:
     if not settings.CACHE_ENABLED:
         return
 
-    if settings.CACHE_BACKEND == CacheBackend.MEMCACHED.value and MEMCACHED_INSTALLED:
-        backend = cache_provider.get_backend(CacheBackend.MEMCACHED.value)
+    if settings.CACHE_BACKEND == CacheBackendType.MEMCACHED.value and MEMCACHED_INSTALLED:
+        try:
+            backend = cache_provider.get_backend(CacheBackendType.MEMCACHED.value)
+        except BackendNotFoundError:
+            logger.debug("Cache backend 'memcached' was never initialized; nothing to close.")
+            return
         if hasattr(backend, "client") and hasattr(backend.client, "close"):
             await backend.client.close()
 
-    elif settings.CACHE_BACKEND == CacheBackend.REDIS.value and REDIS_INSTALLED:
-        backend = cache_provider.get_backend(CacheBackend.REDIS.value)
+    elif settings.CACHE_BACKEND == CacheBackendType.REDIS.value and REDIS_INSTALLED:
+        try:
+            backend = cache_provider.get_backend(CacheBackendType.REDIS.value)
+        except BackendNotFoundError:
+            logger.debug("Cache backend 'redis' was never initialized; nothing to close.")
+            return
         if hasattr(backend, "client") and hasattr(backend.client, "close"):
             await backend.client.close()

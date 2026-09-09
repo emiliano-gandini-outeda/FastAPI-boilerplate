@@ -8,35 +8,12 @@ except ImportError:
         "The redis package is not installed. Please install it with 'pip install redis' or 'pip install -e \".[redis]\"'"
     )
 
-from pydantic import BaseModel
-
 from ....modules.common.utils.logger import get_logger
+from ...backends import RedisSettings
 from ..base import RateLimiterBackend
 from ..exceptions import RateLimiterBackendException
 
 logger = get_logger(__name__)
-
-
-class RedisSettings(BaseModel):
-    """Settings for Redis connection.
-
-    This class defines the configuration for connecting to a Redis server.
-
-    Attributes:
-        host: Redis server hostname. Default is "localhost".
-        port: Redis server port. Default is 6379.
-        db: Redis database number. Default is 0.
-        password: Redis server password. Default is None.
-        connect_timeout: Connection timeout in seconds. Default is 5.
-        pool_size: Maximum number of connections in the pool. Default is 10.
-    """
-
-    host: str = "localhost"
-    port: int = 6379
-    db: int = 0
-    password: str | None = None
-    connect_timeout: int = 5
-    pool_size: int = 10
 
 
 class RedisBackend(RateLimiterBackend):

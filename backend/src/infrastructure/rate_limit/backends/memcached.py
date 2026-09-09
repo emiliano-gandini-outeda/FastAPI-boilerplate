@@ -9,33 +9,12 @@ except ImportError:
         "Please install it with 'pip install aiomcache' or 'pip install -e \".[memcached]\"'"
     )
 
-from pydantic import BaseModel
-
 from ....modules.common.utils.logger import get_logger
+from ...backends import MemcachedSettings
 from ..base import RateLimiterBackend
 from ..exceptions import RateLimiterBackendException
 
 logger = get_logger(__name__)
-
-
-class MemcachedSettings(BaseModel):
-    """Settings for Memcached connection.
-
-    This class defines the configuration for connecting to a Memcached server.
-
-    Attributes:
-        host: Memcached server hostname. Default is "localhost".
-        port: Memcached server port. Default is 11211.
-        pool_size: Maximum number of connections in the pool. Default is 10.
-        connect_timeout: Connection timeout in seconds. Default is 5.
-            Note: This parameter is not currently used by aiomcache.Client but is
-            kept for API consistency with other rate limiter backends.
-    """
-
-    host: str = "localhost"
-    port: int = 11211
-    pool_size: int = 10
-    connect_timeout: int = 5
 
 
 class MemcachedBackend(RateLimiterBackend):

@@ -3,7 +3,7 @@
 from enum import StrEnum
 
 
-class CacheBackend(StrEnum):
+class CacheBackendType(StrEnum):
     """Cache backend types.
 
     Supported backends for caching and rate limiting.

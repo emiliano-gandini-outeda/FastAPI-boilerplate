@@ -1,8 +1,11 @@
+from typing import NoReturn
+
+from ..backends import BackendProvider
 from .base import RateLimiterBackend
 from .exceptions import BackendNotFoundError
 
 
-class RateLimiterProvider:
+class RateLimiterProvider(BackendProvider[RateLimiterBackend]):
     """Provider for rate limiter backends with comprehensive backend management.
 
     This class manages multiple rate limiter backends and provides a centralized
@@ -34,195 +37,10 @@ class RateLimiterProvider:
         ```
     """
 
-    def __init__(self) -> None:
-        """Initialize the rate limiter provider.
-
-        Creates an empty provider with no registered backends. Backends must be
-        registered before use via register_backend().
-
-        Note:
-            The provider starts with no default backend. The first registered
-            backend becomes the default, or you can explicitly set a default
-            using the default=True parameter in register_backend().
-        """
-        self._backends: dict[str, RateLimiterBackend] = {}
-        self._default_backend: str | None = None
-
-    def register_backend(self, name: str, backend: RateLimiterBackend, default: bool = False) -> None:
-        """Register a rate limiter backend with the provider.
-
-        Adds a backend to the provider's registry, making it available for
-        rate limiting operations. Optionally sets the backend as the default.
-
-        Args:
-            name: The name of the backend for identification and retrieval.
-            backend: The backend instance to register.
-            default: Whether this backend should be the default. If True, or if
-                    no default is set, this backend becomes the default.
-
-        Note:
-            Backend names should be unique within the provider. Registering
-            a backend with an existing name will replace the previous backend.
-
-            The first registered backend automatically becomes the default
-            unless explicitly overridden.
-
-        Example:
-            ```python
-            # Register primary Redis backend
-            provider.register_backend(
-                "redis-primary",
-                RedisRateLimiterBackend(host="redis-primary.example.com"),
-                default=True
-            )
-
-            # Register backup Redis backend
-            provider.register_backend(
-                "redis-backup",
-                RedisRateLimiterBackend(host="redis-backup.example.com")
-            )
-            ```
-        """
-        self._backends[name] = backend
-        if default or self._default_backend is None:
-            self._default_backend = name
-
-    def get_backend(self, name: str | None = None) -> RateLimiterBackend:
-        """Get a rate limiter backend by name.
-
-        Retrieves a registered backend by name, or returns the default backend
-        if no name is specified.
-
-        Args:
-            name: The name of the backend to retrieve. If None, returns the
-                 default backend.
-
-        Returns:
-            The requested rate limiter backend.
-
-        Raises:
-            BackendNotFoundError: If the requested backend is not found or
-                                 no default backend is available.
-
-        Example:
-            ```python
-            # Get default backend
-            default_backend = provider.get_backend()
-
-            # Get specific backend
-            redis_backend = provider.get_backend("redis")
-
-            # Handle missing backend
-            try:
-                backend = provider.get_backend("nonexistent")
-            except BackendNotFoundError:
-                backend = provider.get_backend()  # Fall back to default
-            ```
-        """
-        backend_name = name or self._default_backend
-        if not backend_name or backend_name not in self._backends:
-            raise BackendNotFoundError(backend_name or "default")
-        return self._backends[backend_name]
-
-    def set_default_backend(self, name: str) -> None:
-        """Set the default backend for the provider.
-
-        Changes the default backend to the specified registered backend.
-        The default backend is used when no specific backend is requested.
-
-        Args:
-            name: The name of the backend to set as default.
-
-        Raises:
-            BackendNotFoundError: If the requested backend is not found.
-
-        Example:
-            ```python
-            # Switch to backup backend as default
-            provider.set_default_backend("redis-backup")
-
-            # Now all default operations use the backup backend
-            backend = provider.get_backend()  # Returns redis-backup
-            ```
-        """
-        if name not in self._backends:
+    def _raise_not_found(self, name: str | None, *, for_default: bool = False) -> NoReturn:
+        if for_default:
             raise BackendNotFoundError(name)
-        self._default_backend = name
-
-    async def ping_all(self) -> dict[str, bool]:
-        """Ping all registered backends to check their availability.
-
-        Performs health checks on all registered backends to determine their
-        current availability status. This is useful for monitoring, alerting,
-        and automatic failover decisions.
-
-        Returns:
-            A dictionary mapping backend names to their availability status.
-            True indicates the backend is available, False indicates it's not.
-
-        Example:
-            ```python
-            # Check all backend health
-            health_status = await provider.ping_all()
-
-            # Log unhealthy backends
-            for backend_name, is_healthy in health_status.items():
-                if not is_healthy:
-                    logger.warning(f"Backend {backend_name} is unhealthy")
-
-            # Find healthy backends
-            healthy_backends = [name for name, status in health_status.items() if status]
-            ```
-        """
-        results = {}
-        for name, backend in self._backends.items():
-            results[name] = await backend.ping()
-        return results
-
-    def list_backends(self) -> dict[str, type[RateLimiterBackend]]:
-        """List all registered backends with their types.
-
-        Returns information about all registered backends, including their
-        implementation types. Useful for debugging, monitoring, and
-        administrative interfaces.
-
-        Returns:
-            A dictionary mapping backend names to their implementation types.
-
-        Example:
-            ```python
-            # List all backends
-            backends = provider.list_backends()
-            for name, backend_type in backends.items():
-                print(f"Backend: {name}, Type: {backend_type.__name__}")
-
-            # Filter for Redis backends
-            redis_backends = {
-                name: backend_type for name, backend_type in backends.items()
-                if "Redis" in backend_type.__name__
-            }
-            ```
-        """
-        return {name: type(backend) for name, backend in self._backends.items()}
-
-    @property
-    def default_backend_name(self) -> str | None:
-        """Get the name of the default backend.
-
-        Returns:
-            The name of the default backend, or None if no default backend is set.
-
-        Example:
-            ```python
-            # Check current default backend
-            default_name = provider.default_backend_name
-            if default_name:
-                print(f"Default backend: {default_name}")
-            else:
-                print("No default backend configured")
-            ```
-        """
-        return self._default_backend
+        raise BackendNotFoundError(name or "default")
 
 
 rate_limiter_provider = RateLimiterProvider()
