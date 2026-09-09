@@ -7,7 +7,11 @@ from httpx import ASGITransport, AsyncClient
 from src.modules.common.constants import GENERIC_ERROR_MESSAGE
 from src.modules.common.exceptions import (
     InsufficientCreditsError,
+    RateLimitNotFoundError,
     ResourceNotFoundError,
+    TierNotFoundError,
+    UserExistsError,
+    UserNotFoundError,
     ValidationError,
 )
 from src.modules.common.utils.error_handler import (
@@ -115,8 +119,6 @@ def test_map_exception_insufficient_credits_preserves_detail():
 
 def test_map_exception_prefers_specific_subclass_mapping():
     """Subclasses of ResourceNotFoundError must use their own mapping, not the parent's."""
-    from src.modules.common.exceptions import RateLimitNotFoundError, TierNotFoundError, UserNotFoundError
-
     assert map_exception(UserNotFoundError("nope")).detail == "User not found."
     assert map_exception(TierNotFoundError("nope")).detail == "The requested tier was not found."
     assert map_exception(RateLimitNotFoundError("nope")).detail == "Rate limit configuration not found."
@@ -126,8 +128,6 @@ def test_map_exception_prefers_specific_subclass_mapping():
 
 def test_map_exception_user_exists_uses_specific_mapping():
     """UserExistsError must not fall through to the generic ResourceExistsError mapping."""
-    from src.modules.common.exceptions import UserExistsError
-
     http_exc = map_exception(UserExistsError(""))
     assert http_exc.status_code == 422
     assert http_exc.detail == "A user with this email or username already exists."
