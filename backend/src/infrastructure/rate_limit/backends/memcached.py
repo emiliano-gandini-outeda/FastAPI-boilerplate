@@ -93,14 +93,16 @@ class MemcachedBackend(RateLimiterBackend):
     async def _increment_counter(self, key: bytes, amount: int, expiry: int) -> int:
         """Atomically increment a counter, creating it with an expiry if missing."""
         try:
-            return await self.client.incr(key, amount)
+            result = await self.client.incr(key, amount)
+            return result if result is not None else amount
         except ClientException:
             # Key does not exist yet; add it with the window expiry and retry
             # the incr if a concurrent request created it in the meantime.
             added = await self.client.add(key, str(amount).encode(), exptime=expiry)
             if added:
                 return amount
-            return await self.client.incr(key, amount)
+            result = await self.client.incr(key, amount)
+            return result if result is not None else amount
 
     async def get_count(self, key: str) -> int | None:
         """Get the current count for a key.
