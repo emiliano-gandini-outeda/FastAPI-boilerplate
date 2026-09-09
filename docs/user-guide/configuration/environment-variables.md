@@ -175,9 +175,11 @@ GZIP_MINIMUM_SIZE=1000
 ### API Docs
 
 ```env
-ENABLE_DOCS_IN_PRODUCTION=false  # serve /docs even when ENVIRONMENT=production
+ENABLE_DOCS_IN_PRODUCTION=false  # serve /docs even when ENVIRONMENT=production (superuser-only)
 OPENAPI_PREFIX=                   # path prefix for the OpenAPI schema
 ```
+
+When docs are served outside development (staging, or production with `ENABLE_DOCS_IN_PRODUCTION=true`), the built-in FastAPI docs routes are not registered — `/docs`, `/redoc`, and `/openapi.json` are only reachable through the app's own routes, which require superuser authentication.
 
 ## Authentication & Security
 
