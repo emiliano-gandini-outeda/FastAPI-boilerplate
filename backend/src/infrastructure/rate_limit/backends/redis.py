@@ -10,6 +10,7 @@ except ImportError:
 
 from ....modules.common.utils.logger import get_logger
 from ...backends import RedisSettings
+from ...backends.redis_pool import get_redis_pool
 from ..base import RateLimiterBackend
 from ..exceptions import RateLimiterBackendException
 
@@ -30,17 +31,9 @@ class RedisBackend(RateLimiterBackend):
         super().__init__(fail_open=fail_open)
         self.settings = settings or RedisSettings()
         try:
-            self.client = Redis(
-                host=self.settings.host,
-                port=self.settings.port,
-                db=self.settings.db,
-                password=self.settings.password,
-                socket_timeout=self.settings.connect_timeout,
-                socket_connect_timeout=self.settings.connect_timeout,
-                socket_keepalive=True,
-                decode_responses=True,
-                max_connections=self.settings.pool_size,
-            )
+            # Shared pools are created with decode_responses=False; this backend
+            # decodes the only string value it reads (get_count) itself.
+            self.client = Redis(connection_pool=get_redis_pool(self.settings))
         except Exception as e:
             logger.error(f"Failed to initialize Redis client: {e}")
             raise RateLimiterBackendException(f"Failed to initialize Redis client: {e}")
@@ -92,7 +85,7 @@ class RedisBackend(RateLimiterBackend):
         try:
             value = await self.client.get(key)
             if value:
-                return int(value)
+                return int(value.decode() if isinstance(value, bytes) else value)
             return None
         except Exception as e:
             logger.error(f"Error getting rate limit count for key {key}: {e}")

@@ -16,6 +16,7 @@ from fastapi.openapi.utils import get_openapi
 from ..modules.common.utils.error_handler import register_exception_handlers
 from .auth.dependencies import get_current_superuser
 from .auth.setup import auth
+from .backends.redis_pool import close_redis_pools
 from .cache.initialize import close_cache, initialize_cache
 from .config.settings import (
     CacheSettings,
@@ -77,6 +78,10 @@ def lifespan_factory(
 
             if isinstance(settings, RateLimiterSettings) and settings.RATE_LIMITER_ENABLED:
                 await close_rate_limiter()
+
+            # Shared Redis pools outlive individual clients, which never own
+            # them; disconnect them once both subsystems are closed.
+            await close_redis_pools()
 
     return lifespan
 

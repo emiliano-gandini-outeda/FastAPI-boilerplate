@@ -96,6 +96,16 @@ async def test_get_count(redis_backend):
 
 
 @pytest.mark.asyncio
+async def test_get_count_decodes_bytes(redis_backend):
+    """Shared pools run with decode_responses=False, so get_count must decode bytes."""
+    backend, client_mock, _ = redis_backend
+
+    client_mock.get.return_value = b"7"
+    count = await backend.get_count("test:123")
+    assert count == 7
+
+
+@pytest.mark.asyncio
 async def test_reset(redis_backend):
     """Test resetting the counter for a key."""
     backend, client_mock, _ = redis_backend

@@ -9,6 +9,7 @@ except ImportError:
     )
 
 from ...backends import RedisSettings
+from ...backends.redis_pool import get_redis_pool
 from ..base import CacheBackend
 
 
@@ -22,14 +23,7 @@ class RedisBackend(CacheBackend):
             settings: Custom settings for Redis connection. If None, default settings are used.
         """
         self.settings = settings or RedisSettings()
-        self.client = Redis(
-            host=self.settings.host,
-            port=self.settings.port,
-            db=self.settings.db,
-            password=self.settings.password,
-            socket_timeout=self.settings.connect_timeout,
-            max_connections=self.settings.pool_size,
-        )
+        self.client = Redis(connection_pool=get_redis_pool(self.settings))
 
     async def get(self, key: str) -> Any | None:
         """Get a value from the cache.
