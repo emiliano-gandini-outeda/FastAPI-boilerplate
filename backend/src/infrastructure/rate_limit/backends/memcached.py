@@ -3,6 +3,7 @@ from datetime import UTC, datetime
 
 try:
     import aiomcache
+    from aiomcache.exceptions import ClientException
 except ImportError:
     raise ImportError(
         "The aiomcache package is not installed. "
@@ -80,11 +81,7 @@ class MemcachedBackend(RateLimiterBackend):
             window_start = current_timestamp - (current_timestamp % period)
             rate_limit_key = f"{key_hash}:{window_start}".encode()
 
-            value = await self.client.get(rate_limit_key)
-            current_count = int(value.decode()) if value else 0
-
-            current_count += 1
-            await self.client.set(rate_limit_key, str(current_count).encode(), exptime=period)
+            current_count = await self._increment_counter(rate_limit_key, amount=1, expiry=period)
 
             is_rate_limited = current_count > limit
             return current_count, is_rate_limited
@@ -92,6 +89,18 @@ class MemcachedBackend(RateLimiterBackend):
         except Exception as e:
             logger.error(f"Error checking rate limit for key {key}: {e}")
             return 0, not self.fail_open
+
+    async def _increment_counter(self, key: bytes, amount: int, expiry: int) -> int:
+        """Atomically increment a counter, creating it with an expiry if missing."""
+        try:
+            return await self.client.incr(key, amount)
+        except ClientException:
+            # Key does not exist yet; add it with the window expiry and retry
+            # the incr if a concurrent request created it in the meantime.
+            added = await self.client.add(key, str(amount).encode(), exptime=expiry)
+            if added:
+                return amount
+            return await self.client.incr(key, amount)
 
     async def get_count(self, key: str) -> int | None:
         """Get the current count for a key.
@@ -134,14 +143,7 @@ class MemcachedBackend(RateLimiterBackend):
             The new value after incrementing
         """
         try:
-            key_bytes = key.encode()
-            value = await self.client.get(key_bytes)
-            current_count = int(value.decode()) if value else 0
-
-            new_count = current_count + amount
-            await self.client.set(key_bytes, str(new_count).encode(), exptime=expiry)
-
-            return new_count
+            return await self._increment_counter(key.encode(), amount=amount, expiry=expiry)
         except Exception as e:
             logger.error(f"Error incrementing count for key {key}: {e}")
             return 0
@@ -156,8 +158,7 @@ class MemcachedBackend(RateLimiterBackend):
             True if deleted, False otherwise
         """
         try:
-            await self.client.delete(key.encode())
-            return True
+            return await self.client.delete(key.encode())
         except Exception as e:
             logger.error(f"Error deleting key {key}: {e}")
             return False

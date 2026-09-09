@@ -19,8 +19,19 @@ def mock_redis_client():
     client_mock = AsyncMock()
     client_mock.pipeline = MagicMock(return_value=pipeline_mock)
     client_mock.get = AsyncMock(return_value="1")
+    client_mock.mget = AsyncMock(return_value=["1"])
     client_mock.delete = AsyncMock(return_value=1)
     client_mock.ping = AsyncMock(return_value=True)
+
+    def scan_iter(match=None):
+        async def _gen():
+            for key in client_mock._scan_keys:
+                yield key
+
+        return _gen()
+
+    client_mock._scan_keys = []
+    client_mock.scan_iter = MagicMock(side_effect=scan_iter)
 
     return client_mock, pipeline_mock
 
@@ -83,25 +94,39 @@ async def test_rate_limited(redis_backend):
 
 @pytest.mark.asyncio
 async def test_get_count(redis_backend):
-    """Test getting the current count for a key."""
+    """Test getting the current count sums the windowed keys."""
     backend, client_mock, _ = redis_backend
 
-    client_mock.get.return_value = "3"
+    client_mock._scan_keys = ["test:123:1000", "test:123:1060"]
+    client_mock.mget.return_value = ["2", "1"]
     count = await backend.get_count("test:123")
     assert count == 3
+    client_mock.scan_iter.assert_called_once_with(match="test:123:*")
 
-    client_mock.get.return_value = None
+    client_mock._scan_keys = []
     count = await backend.get_count("test:456")
     assert count is None
 
 
 @pytest.mark.asyncio
 async def test_reset(redis_backend):
-    """Test resetting the counter for a key."""
+    """Test resetting the counter deletes all windowed keys."""
     backend, client_mock, _ = redis_backend
 
+    client_mock._scan_keys = ["test:123:1000", "test:123:1060"]
     await backend.reset("test:123")
-    client_mock.delete.assert_called_once_with("test:123")
+    client_mock.delete.assert_called_once_with("test:123:1000", "test:123:1060")
+
+
+@pytest.mark.asyncio
+async def test_delete_covers_windowed_keys(redis_backend):
+    """Test that delete removes the raw key and any windowed keys."""
+    backend, client_mock, _ = redis_backend
+
+    client_mock._scan_keys = ["test:123:1000"]
+    result = await backend.delete("test:123")
+    assert result is True
+    client_mock.delete.assert_called_once_with("test:123", "test:123:1000")
 
 
 @pytest.mark.asyncio

@@ -103,6 +103,10 @@ class RedisBackend(RateLimiterBackend):
             logger.error(f"Error checking rate limit for key {key}: {e}")
             return 0, not self.fail_open
 
+    async def _windowed_keys(self, key: str) -> list[str]:
+        """Return all windowed keys (``f"{key}:{window_start}"``) for a base key."""
+        return [k async for k in self.client.scan_iter(match=f"{key}:*")]
+
     async def get_count(self, key: str) -> int | None:
         """Get the current count for a key.
 
@@ -113,10 +117,11 @@ class RedisBackend(RateLimiterBackend):
             The current count or None if the key doesn't exist.
         """
         try:
-            value = await self.client.get(key)
-            if value:
-                return int(value)
-            return None
+            keys = await self._windowed_keys(key)
+            if not keys:
+                return None
+            values = await self.client.mget(keys)
+            return sum(int(value) for value in values if value)
         except Exception as e:
             logger.error(f"Error getting rate limit count for key {key}: {e}")
             return None
@@ -128,7 +133,9 @@ class RedisBackend(RateLimiterBackend):
             key: The rate limit key to reset.
         """
         try:
-            await self.client.delete(key)
+            keys = await self._windowed_keys(key)
+            if keys:
+                await self.client.delete(*keys)
         except Exception as e:
             logger.error(f"Error resetting rate limit for key {key}: {e}")
 
@@ -172,7 +179,8 @@ class RedisBackend(RateLimiterBackend):
             True if deleted, False otherwise
         """
         try:
-            result = await self.client.delete(key)
+            keys = [key, *await self._windowed_keys(key)]
+            result = await self.client.delete(*keys)
             return bool(result)
         except Exception as e:
             logger.error(f"Error deleting key {key}: {e}")

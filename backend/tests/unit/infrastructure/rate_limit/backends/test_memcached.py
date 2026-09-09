@@ -3,6 +3,7 @@
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from aiomcache.exceptions import ClientException
 
 from src.infrastructure.rate_limit.backends.memcached import (
     MemcachedBackend,
@@ -17,6 +18,8 @@ def mock_aiomcache():
     client_mock = AsyncMock()
     client_mock.get = AsyncMock()
     client_mock.set = AsyncMock()
+    client_mock.add = AsyncMock()
+    client_mock.incr = AsyncMock()
     client_mock.delete = AsyncMock()
     return client_mock
 
@@ -44,42 +47,53 @@ async def test_init_error():
 @pytest.mark.asyncio
 async def test_increment_and_check_new_key(memcached_backend, mock_aiomcache):
     """Test incrementing a counter for a new key."""
-    mock_aiomcache.get.return_value = None
+    mock_aiomcache.incr.side_effect = ClientException(b"NOT_FOUND")
+    mock_aiomcache.add.return_value = True
 
     count, is_limited = await memcached_backend.increment_and_check(key="test:123", limit=5, period=60)
 
     assert count == 1
     assert is_limited is False
 
-    assert mock_aiomcache.get.called
-    assert mock_aiomcache.set.called
+    mock_aiomcache.incr.assert_called_once()
+    mock_aiomcache.add.assert_called_once()
 
-    set_args = mock_aiomcache.set.call_args.args
-    assert set_args[1] == b"1"
-    assert mock_aiomcache.set.call_args.kwargs["exptime"] == 60
+    add_args = mock_aiomcache.add.call_args.args
+    assert add_args[1] == b"1"
+    assert mock_aiomcache.add.call_args.kwargs["exptime"] == 60
 
 
 @pytest.mark.asyncio
 async def test_increment_and_check_existing_key(memcached_backend, mock_aiomcache):
-    """Test incrementing a counter for an existing key."""
-    mock_aiomcache.get.return_value = b"4"
+    """Test incrementing a counter for an existing key atomically."""
+    mock_aiomcache.incr.return_value = 5
 
     count, is_limited = await memcached_backend.increment_and_check(key="test:123", limit=5, period=60)
 
     assert count == 5
     assert is_limited is False
 
-    mock_aiomcache.get.assert_called_once()
-    mock_aiomcache.set.assert_called_once()
+    mock_aiomcache.incr.assert_called_once()
+    mock_aiomcache.add.assert_not_called()
 
-    set_args = mock_aiomcache.set.call_args.args
-    assert set_args[1] == b"5"
+
+@pytest.mark.asyncio
+async def test_increment_and_check_add_race(memcached_backend, mock_aiomcache):
+    """Test that a concurrent add falls back to incrementing the existing key."""
+    mock_aiomcache.incr.side_effect = [ClientException(b"NOT_FOUND"), 2]
+    mock_aiomcache.add.return_value = False
+
+    count, is_limited = await memcached_backend.increment_and_check(key="test:123", limit=5, period=60)
+
+    assert count == 2
+    assert is_limited is False
+    assert mock_aiomcache.incr.call_count == 2
 
 
 @pytest.mark.asyncio
 async def test_rate_limited(memcached_backend, mock_aiomcache):
     """Test that requests are rate limited once limit is exceeded."""
-    mock_aiomcache.get.return_value = b"5"
+    mock_aiomcache.incr.return_value = 6
 
     count, is_limited = await memcached_backend.increment_and_check(key="test:123", limit=5, period=60)
 
@@ -126,9 +140,19 @@ async def test_ping_failure(memcached_backend, mock_aiomcache):
 
 
 @pytest.mark.asyncio
+async def test_delete_returns_actual_result(memcached_backend, mock_aiomcache):
+    """Test that delete reflects whether the key existed."""
+    mock_aiomcache.delete.return_value = True
+    assert await memcached_backend.delete("test:123") is True
+
+    mock_aiomcache.delete.return_value = False
+    assert await memcached_backend.delete("test:123") is False
+
+
+@pytest.mark.asyncio
 async def test_increment_error_handling(memcached_backend, mock_aiomcache):
     """Test error handling during increment operation."""
-    mock_aiomcache.get.side_effect = Exception("Connection error")
+    mock_aiomcache.incr.side_effect = Exception("Connection error")
 
     count, is_limited = await memcached_backend.increment_and_check(key="test:123", limit=5, period=60)
 
