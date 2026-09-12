@@ -7,6 +7,7 @@ from fastcrud.types import GetMultiResponseDict
 from sqlalchemy.exc import MultipleResultsFound, NoResultFound
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ...infrastructure.auth.setup import auth
 from ...infrastructure.logging import get_logger
 from ..common.exceptions import PermissionDeniedError, TierNotFoundError, UserExistsError, UserNotFoundError, ValidationError
 from ..rate_limit.models import RateLimit
@@ -70,6 +71,7 @@ class UserService:
             created_user = await service.create(user_data, db)
             ```
         """
+        auth.validate_password(user.password)
         email_exists = await crud_users.exists(db=db, email=user.email)
         if email_exists:
             raise UserExistsError("Email already registered")

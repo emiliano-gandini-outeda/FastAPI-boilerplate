@@ -82,6 +82,13 @@ CSRF_ENABLED=true
 # Trusted reverse proxies in front of the app (used to resolve the real client
 # IP for login lockout). 0 = none; set 1 behind a single nginx/Caddy.
 TRUSTED_PROXY_HOPS=0
+
+# Password policy (enforced by crudauth on registration and password changes)
+PASSWORD_MIN_LENGTH=8
+PASSWORD_REQUIRE_UPPERCASE=false
+PASSWORD_REQUIRE_LOWERCASE=false
+PASSWORD_REQUIRE_DIGIT=false
+PASSWORD_REQUIRE_SPECIAL=false
 ```
 
 Login lockout is handled by `crudauth` itself: it applies an escalating per-IP / per-identifier lockout and returns `429 Too Many Requests` with a `Retry-After` header. There are no `LOGIN_MAX_ATTEMPTS` / `LOGIN_WINDOW_MINUTES` knobs to set.
@@ -125,7 +132,6 @@ CACHE_REDIS_PASSWORD=
 
 ```env
 RATE_LIMITER_ENABLED=true
-RATE_LIMITER_BACKEND=redis      # or "memcached"
 RATE_LIMITER_FAIL_OPEN=true
 DEFAULT_RATE_LIMIT_LIMIT=100
 DEFAULT_RATE_LIMIT_PERIOD=60
@@ -136,6 +142,10 @@ RATE_LIMITER_REDIS_PORT=6379
 RATE_LIMITER_REDIS_DB=1
 RATE_LIMITER_REDIS_PASSWORD=
 ```
+
+API limits are resolved by `crudauth` per request from the user's tier and path. Authenticated
+requests are keyed by user ID; anonymous requests are keyed by the client IP, honoring
+`TRUSTED_PROXY_HOPS`.
 
 ### Background Tasks (Taskiq)
 
@@ -189,6 +199,10 @@ OAUTH_GITHUB_CLIENT_SECRET=
 ```
 
 Leave the credentials empty to disable a provider. See [Authentication](../user-guide/authentication/index.md) for the OAuth setup walkthrough.
+
+The built-in crudauth OAuth router keeps the existing paths (`/api/v1/auth/oauth/{provider}` and
+`/api/v1/auth/oauth/callback/{provider}`), returns JSON, sets session cookies, binds state to the
+browser, and validates post-login redirects as same-origin relative paths.
 
 ### Admin Interface
 

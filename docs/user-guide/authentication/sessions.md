@@ -243,7 +243,7 @@ Terminates the session and clears the cookies.
 |-----------|----------|
 | `auth = CRUDAuth(...)` singleton | `backend/src/infrastructure/auth/setup.py` |
 | Dependencies | `backend/src/infrastructure/auth/dependencies.py` |
-| OAuth building blocks | `backend/src/infrastructure/auth/oauth.py` |
+| OAuth configuration | `backend/src/infrastructure/auth/setup.py` |
 | Login/logout/OAuth routes | `backend/src/infrastructure/auth/routes.py` |
 | HTTP exceptions (fastcrud re-export) | `backend/src/infrastructure/auth/http_exceptions.py` |
 | Auth settings | `backend/src/infrastructure/config/settings.py` (`AuthSettings`) |

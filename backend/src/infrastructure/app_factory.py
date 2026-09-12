@@ -28,8 +28,7 @@ from .config.settings import (
 )
 from .database.session import create_tables
 from .middleware import ClientCacheMiddleware, SecurityHeadersMiddleware
-from .rate_limit.initialize import close_rate_limiter, initialize_rate_limiter
-from .rate_limit.middleware import RateLimiterMiddleware
+from .redis import cache_redis_client, rate_limiter_redis_client
 
 logger = logging.getLogger(__name__)
 
@@ -60,9 +59,6 @@ def lifespan_factory(
             if isinstance(settings, CacheSettings) and settings.CACHE_ENABLED:
                 await initialize_cache()
 
-            if isinstance(settings, RateLimiterSettings) and settings.RATE_LIMITER_ENABLED:
-                await initialize_rate_limiter()
-
             await auth.initialize()
 
             initialization_complete.set()
@@ -72,11 +68,18 @@ def lifespan_factory(
         finally:
             await auth.shutdown()
 
-            if isinstance(settings, CacheSettings) and settings.CACHE_ENABLED:
+            if isinstance(settings, CacheSettings):
                 await close_cache()
 
+            if not (
+                isinstance(settings, CacheSettings)
+                and settings.CACHE_ENABLED
+                and settings.CACHE_BACKEND == "redis"
+            ):
+                await cache_redis_client.aclose()
+
             if isinstance(settings, RateLimiterSettings) and settings.RATE_LIMITER_ENABLED:
-                await close_rate_limiter()
+                await rate_limiter_redis_client.aclose()
 
     return lifespan
 
@@ -258,9 +261,6 @@ def create_application(
     register_exception_handlers(application)
 
     application.include_router(router)
-
-    if isinstance(settings, RateLimiterSettings) and settings.RATE_LIMITER_ENABLED:
-        application.add_middleware(RateLimiterMiddleware)
 
     if isinstance(settings, CacheSettings) and settings.CACHE_ENABLED and hasattr(settings, "CLIENT_CACHE_ENABLED"):
         if settings.CLIENT_CACHE_ENABLED:

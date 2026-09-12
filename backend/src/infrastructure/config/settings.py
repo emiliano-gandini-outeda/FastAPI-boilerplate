@@ -249,6 +249,12 @@ class AuthSettings(BaseSettings):
     # peer (no proxy). Set to 1 behind a single nginx/Caddy, 2 if Cloudflare is also in front.
     TRUSTED_PROXY_HOPS: int = config("TRUSTED_PROXY_HOPS", default=0, cast=int)
 
+    PASSWORD_MIN_LENGTH: int = config("PASSWORD_MIN_LENGTH", default=8, cast=int)
+    PASSWORD_REQUIRE_UPPERCASE: bool = config("PASSWORD_REQUIRE_UPPERCASE", default=False, cast=bool)
+    PASSWORD_REQUIRE_LOWERCASE: bool = config("PASSWORD_REQUIRE_LOWERCASE", default=False, cast=bool)
+    PASSWORD_REQUIRE_DIGIT: bool = config("PASSWORD_REQUIRE_DIGIT", default=False, cast=bool)
+    PASSWORD_REQUIRE_SPECIAL: bool = config("PASSWORD_REQUIRE_SPECIAL", default=False, cast=bool)
+
     OAUTH_GOOGLE_CLIENT_ID: str = config("OAUTH_GOOGLE_CLIENT_ID", default="")
     OAUTH_GOOGLE_CLIENT_SECRET: str = config("OAUTH_GOOGLE_CLIENT_SECRET", default="")
     OAUTH_GITHUB_CLIENT_ID: str = config("OAUTH_GITHUB_CLIENT_ID", default="")

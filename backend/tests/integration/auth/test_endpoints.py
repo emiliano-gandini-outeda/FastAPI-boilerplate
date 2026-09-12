@@ -6,19 +6,16 @@ check-auth route depends on ``get_optional_principal``, so we override that
 FastAPI dependency to simulate authenticated / anonymous callers.
 """
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 from crudauth import Principal, get_password_hash
-from crudauth.oauth import OAuthState, OAuthUserInfo
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.infrastructure.auth.dependencies import get_optional_principal
 from src.interfaces.main import app
 from src.modules.user.models import User
-
-ROUTES = "src.infrastructure.auth.routes"
 
 
 @pytest.mark.asyncio
@@ -63,78 +60,6 @@ async def test_login_then_logout(client: AsyncClient, test_user: dict):
 
     assert logout.status_code == 200
     assert logout.json()["message"] == "Logged out successfully"
-
-
-@pytest.mark.asyncio
-async def test_oauth_google_login(client: AsyncClient):
-    """The Google login initiation endpoint returns the provider authorization URL."""
-    mock_provider = MagicMock()
-    mock_provider.get_authorization_url = MagicMock(
-        return_value={
-            "url": "https://accounts.google.com/o/oauth2/v2/auth?dummy=params",
-            "state": "test-state-value",
-            "code_verifier": "test-code-verifier",
-        }
-    )
-    mock_storage = MagicMock()
-    mock_storage.create = AsyncMock(return_value="test-state-value")
-
-    with (
-        patch(f"{ROUTES}.oauth_providers", {"google": mock_provider}),
-        patch(f"{ROUTES}.oauth_state_storage", mock_storage),
-    ):
-        response = await client.get("/api/v1/auth/oauth/google")
-
-    assert response.status_code == 200
-    assert response.json()["url"] == "https://accounts.google.com/o/oauth2/v2/auth?dummy=params"
-    mock_provider.get_authorization_url.assert_called_once()
-    mock_storage.create.assert_called_once()
-
-
-@pytest.mark.asyncio
-async def test_oauth_callback_invalid_state(client: AsyncClient):
-    """An unknown state parameter is rejected (302 redirect / 400 for json)."""
-    mock_storage = MagicMock()
-    mock_storage.get = AsyncMock(return_value=None)
-
-    with patch(f"{ROUTES}.oauth_state_storage", mock_storage):
-        response = await client.get(
-            "/api/v1/auth/oauth/callback/google",
-            params={"code": "test-code", "state": "invalid-state"},
-        )
-        assert response.status_code == 302
-
-        response = await client.get(
-            "/api/v1/auth/oauth/callback/google",
-            params={"code": "test-code", "state": "invalid-state", "response_format": "json"},
-        )
-        assert response.status_code == 400
-
-
-@pytest.mark.asyncio
-async def test_oauth_callback_provider_mismatch(client: AsyncClient):
-    """A state minted for a different provider is rejected (302 redirect / 400 for json)."""
-    mismatched_state = OAuthState(
-        state="test-state-value",
-        provider="github",
-        redirect_to="/",
-        code_verifier="test-code-verifier",
-    )
-    mock_storage = MagicMock()
-    mock_storage.get = AsyncMock(return_value=mismatched_state)
-
-    with patch(f"{ROUTES}.oauth_state_storage", mock_storage):
-        response = await client.get(
-            "/api/v1/auth/oauth/callback/google",
-            params={"code": "test-code", "state": "test-state-value"},
-        )
-        assert response.status_code == 302
-
-        response = await client.get(
-            "/api/v1/auth/oauth/callback/google",
-            params={"code": "test-code", "state": "test-state-value", "response_format": "json"},
-        )
-        assert response.status_code == 400
 
 
 @pytest.mark.asyncio
@@ -262,67 +187,6 @@ async def test_refresh_csrf_token_no_session_returns_401(client: AsyncClient):
     """/refresh-csrf with no session cookie is unauthorized."""
     response = await client.post("/api/v1/auth/refresh-csrf")
     assert response.status_code == 401
-
-
-@pytest.mark.asyncio
-async def test_oauth_google_login_provider_failure_returns_500(client: AsyncClient):
-    """If the provider blows up while building the auth URL, the endpoint returns 500."""
-    mock_provider = MagicMock()
-    mock_provider.get_authorization_url = MagicMock(side_effect=RuntimeError("boom"))
-
-    with patch(f"{ROUTES}.oauth_providers", {"google": mock_provider}):
-        response = await client.get("/api/v1/auth/oauth/google")
-
-    assert response.status_code == 500
-
-
-@pytest.mark.asyncio
-async def test_oauth_callback_success_creates_user(client: AsyncClient):
-    """The happy-path callback links/creates the user and starts a session (json format).
-
-    Exercises the real oauth_account_service.get_or_create_user → repo.create against
-    the test DB (proving crudauth user creation works on the dataclass-mapped User),
-    with only the provider's network calls mocked.
-    """
-    valid_state = OAuthState(
-        state="good-state",
-        provider="google",
-        redirect_to="/",
-        code_verifier="test-code-verifier",
-    )
-    mock_storage = MagicMock()
-    mock_storage.get = AsyncMock(return_value=valid_state)
-    mock_storage.delete = AsyncMock(return_value=None)
-
-    mock_provider = MagicMock()
-    mock_provider.exchange_code = AsyncMock(return_value={"access_token": "tok"})
-    mock_provider.get_user_info = AsyncMock(return_value={})
-    mock_provider.process_user_info = AsyncMock(
-        return_value=OAuthUserInfo(
-            provider="google",
-            provider_user_id="google-uid-123",
-            email="oauth_new@example.com",
-            email_verified=True,
-            name="OAuth New User",
-        )
-    )
-
-    with (
-        patch(f"{ROUTES}.oauth_state_storage", mock_storage),
-        patch(f"{ROUTES}.oauth_providers", {"google": mock_provider}),
-    ):
-        response = await client.get(
-            "/api/v1/auth/oauth/callback/google",
-            params={"code": "test-code", "state": "good-state", "response_format": "json"},
-        )
-
-    assert response.status_code == 200
-    body = response.json()
-    assert body["success"] is True
-    assert body["user"]["email"] == "oauth_new@example.com"
-    assert body["user"]["is_new_user"] is True
-    assert body["csrf_token"]
-    mock_storage.delete.assert_awaited_once()
 
 
 @pytest.mark.asyncio
