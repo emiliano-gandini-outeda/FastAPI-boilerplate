@@ -163,9 +163,10 @@ class ProductionSecurityValidator:
         Note:
             Critical security issues include:
             - Insecure secret keys
-            - Unprotected admin interfaces
             - Default database credentials
             - Empty database passwords
+            - Admin interface enabled without credentials
+            - CORS allowing every origin
 
             These issues can lead to immediate security breaches and
             should be fixed before production deployment.
@@ -173,9 +174,10 @@ class ProductionSecurityValidator:
         Example:
             Critical issues that would be detected:
             - SECRET_KEY using default values
-            - Admin interface with no IP restrictions
             - Database using 'postgres' password
             - Empty database password
+            - ADMIN_ENABLED without ADMIN_USERNAME/ADMIN_PASSWORD
+            - CORS_ORIGINS containing '*'
         """
         errors = []
 
@@ -207,6 +209,18 @@ class ProductionSecurityValidator:
                 "ADMIN_ENABLED=false for production."
             )
 
+        if self._is_cors_too_permissive():
+            credentials_note = (
+                " Combined with CORS_ALLOW_CREDENTIALS=true, this lets any browser origin "
+                "make authenticated cross-origin requests with the user's session cookie."
+                if getattr(self.settings, "CORS_ALLOW_CREDENTIALS", True)
+                else ""
+            )
+            errors.append(
+                "CORS_ORIGINS contains '*' in production. Restrict to an explicit "
+                "comma-separated allowlist of real domains." + credentials_note
+            )
+
         return errors
 
     def _validate_warning_security(self) -> None:
@@ -219,7 +233,6 @@ class ProductionSecurityValidator:
         Note:
             Warning-level security issues include:
             - Redis instances without passwords
-            - Overly permissive CORS settings
             - Debug mode enabled in production
             - API documentation exposed
             - Insecure session configurations
@@ -230,7 +243,6 @@ class ProductionSecurityValidator:
 
         Example:
             Warning issues that would be detected:
-            - CORS_ORIGINS set to '*'
             - Redis without password authentication
             - Session timeout too long
             - Weak admin usernames or passwords
@@ -245,12 +257,6 @@ class ProductionSecurityValidator:
                 "DATABASE_URL is set but contains no password. This is expected with "
                 "IAM or certificate-based authentication, but is a mistake otherwise — "
                 "confirm the database is not reachable without credentials."
-            )
-
-        if self._is_cors_too_permissive():
-            warnings.append(
-                "CORS_ORIGINS is set to '*' (allow all origins). This can enable "
-                "cross-origin attacks. Consider restricting to specific domains in production."
             )
 
         if self._is_debug_enabled():

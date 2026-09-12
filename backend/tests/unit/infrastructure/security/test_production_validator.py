@@ -28,6 +28,7 @@ class TestProductionSecurityValidator:
             "SESSION_BACKEND": "redis",
             "CORS_ENABLED": True,
             "CORS_ORIGINS": "https://example.com",
+            "CORS_ALLOW_CREDENTIALS": False,
             "DEBUG": False,
             "ENABLE_DOCS_IN_PRODUCTION": False,
             "SESSION_SECURE_COOKIES": True,
@@ -243,17 +244,18 @@ class TestProductionSecurityValidator:
         shared_warnings = [log for log in warning_logs if "sharing the same Redis instance" in log.message]
         assert len(shared_warnings) > 0
 
-    def test_permissive_cors_logs_warning(self, caplog):
-        """Test that permissive CORS logs warning."""
-        settings = self.create_mock_settings(CORS_ORIGINS="*")
+    @pytest.mark.parametrize(("allow_credentials", "expect_note"), [(True, True), (False, False)])
+    def test_cors_wildcard_raises_error(self, allow_credentials, expect_note):
+        """Test that CORS_ORIGINS='*' is a critical error, noting credentials when they are allowed."""
+        settings = self.create_mock_settings(CORS_ORIGINS="*", CORS_ALLOW_CREDENTIALS=allow_credentials)
         validator = ProductionSecurityValidator(settings)
 
-        validator.validate_production_security()
+        with pytest.raises(ProductionSecurityError) as exc_info:
+            validator.validate_production_security()
 
-        # Check for CORS warning
-        warning_logs = [record for record in caplog.records if record.levelname == "WARNING"]
-        cors_warnings = [log for log in warning_logs if "CORS_ORIGINS" in log.message and "allow all origins" in log.message]
-        assert len(cors_warnings) > 0
+        message = str(exc_info.value)
+        assert "CORS_ORIGINS contains '*'" in message
+        assert ("CORS_ALLOW_CREDENTIALS=true" in message) is expect_note
 
     def test_debug_enabled_logs_warning(self, caplog):
         """Test that debug mode enabled logs warning."""

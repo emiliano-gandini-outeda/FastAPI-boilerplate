@@ -184,7 +184,7 @@ class CORSSettings(BaseSettings):
     """CORS-related settings."""
 
     CORS_ENABLED: bool = config("CORS_ENABLED", default=True, cast=bool)
-    CORS_ORIGINS: str = config("CORS_ORIGINS", default="*")
+    CORS_ORIGINS: str = config("CORS_ORIGINS", default="http://localhost:3000,http://localhost:5173")
     CORS_ALLOW_CREDENTIALS: bool = config("CORS_ALLOW_CREDENTIALS", default=True, cast=bool)
 
     @property
