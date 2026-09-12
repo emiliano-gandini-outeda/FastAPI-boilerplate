@@ -151,14 +151,14 @@ TASKIQ_MAX_TASKS_PER_WORKER=1000
 
 ```env
 CORS_ENABLED=true
-CORS_ORIGINS=http://localhost:3000,http://localhost:8000  # comma-separated list of origins
+CORS_ORIGINS=http://localhost:3000,http://localhost:5173  # comma-separated list of origins
 CORS_ALLOW_CREDENTIALS=true
 CORS_ALLOW_METHODS=*
 CORS_ALLOW_HEADERS=*
 ```
 
 !!! danger "CORS in Production"
-    Never use `*` for `CORS_ORIGINS` in production — combined with `CORS_ALLOW_CREDENTIALS=true` it is rejected by browsers and treated as a critical error by the production security validator. Specify exact domains:
+    Never use `*` for `CORS_ORIGINS` in production: any website could call the API from your users' browsers, and with `CORS_ALLOW_CREDENTIALS=true` those requests carry their session cookie. The production security validator refuses to start with it. Specify exact domains:
     ```env
     CORS_ORIGINS=https://yourapp.com,https://www.yourapp.com
     CORS_ALLOW_METHODS=GET,POST,PUT,DELETE,PATCH
