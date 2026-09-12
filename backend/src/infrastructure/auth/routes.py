@@ -33,7 +33,8 @@ async def logout(response: Response, principal: Principal = Depends(crud_auth.cu
     return {"message": "Logged out successfully"}
 
 
-router.include_router(crud_auth.oauth_router)
+if crud_auth.oauth is not None:
+    router.include_router(crud_auth.oauth_router)
 
 
 @router.post("/refresh-csrf", responses={401: {"description": "Not authenticated"}})
