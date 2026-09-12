@@ -324,17 +324,16 @@ class TestProductionSecurityValidator:
         with pytest.raises(ProductionSecurityError):
             validate_production_security(settings)
 
-    def test_no_admin_credentials_skips_admin_checks(self, caplog):
-        """Test that missing admin credentials skip admin checks."""
+    def test_empty_admin_credentials_raises_error(self):
+        """Test that an enabled admin interface without credentials is a critical issue."""
         settings = self.create_mock_settings(ADMIN_USERNAME="", ADMIN_PASSWORD="")
         validator = ProductionSecurityValidator(settings)
 
-        validator.validate_production_security()
+        with pytest.raises(ProductionSecurityError) as exc_info:
+            validator.validate_production_security()
 
-        # Should not have admin credential warnings
-        warning_logs = [record for record in caplog.records if record.levelname == "WARNING"]
-        admin_warnings = [log for log in warning_logs if "Admin username" in log.message or "Admin password" in log.message]
-        assert len(admin_warnings) == 0
+        assert "ADMIN_USERNAME" in str(exc_info.value)
+        assert "ADMIN_PASSWORD" in str(exc_info.value)
 
     def test_redis_ssl_with_external_host(self, caplog):
         """Test that external Redis without SSL logs warning."""
