@@ -2,7 +2,7 @@ import json
 import logging
 from asyncio import Event
 from collections.abc import AsyncGenerator, Callable
-from contextlib import AbstractAsyncContextManager, asynccontextmanager
+from contextlib import AbstractAsyncContextManager, AsyncExitStack, asynccontextmanager
 from typing import Any
 
 import anyio
@@ -53,39 +53,24 @@ def lifespan_factory(
 
         await set_threadpool_tokens()
 
-        # Teardown must only close what actually initialized: when startup fails
-        # midway, closing a never-initialized component raises from the finally
-        # block and masks the real startup error (e.g. an unreachable DB was
-        # reported as "Backend 'redis' is not available" from close_cache).
-        cache_initialized = False
-        rate_limiter_initialized = False
-
-        try:
+        async with AsyncExitStack() as teardown:
             if isinstance(settings, DatabaseSettings) and create_tables_on_startup:
                 await create_tables()
 
             if isinstance(settings, CacheSettings) and settings.CACHE_ENABLED:
                 await initialize_cache()
-                cache_initialized = True
+                teardown.push_async_callback(close_cache)
 
             if isinstance(settings, RateLimiterSettings) and settings.RATE_LIMITER_ENABLED:
                 await initialize_rate_limiter()
-                rate_limiter_initialized = True
+                teardown.push_async_callback(close_rate_limiter)
 
+            teardown.push_async_callback(auth.shutdown)
             await auth.initialize()
 
             initialization_complete.set()
 
             yield
-
-        finally:
-            await auth.shutdown()
-
-            if cache_initialized:
-                await close_cache()
-
-            if rate_limiter_initialized:
-                await close_rate_limiter()
 
     return lifespan
 

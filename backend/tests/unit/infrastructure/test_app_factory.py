@@ -9,13 +9,7 @@ from src.infrastructure.config.settings import settings
 
 @pytest.mark.asyncio
 async def test_startup_failure_surfaces_the_original_error(monkeypatch):
-    """A failed startup must raise the failing step's exception, not a teardown one.
-
-    Before the initialized-flags guard, a startup failure (e.g. an unreachable DB
-    in ``create_tables``) reached the ``finally`` block, where ``close_cache()``
-    raised ``BackendNotFoundError`` for the never-initialized backend and masked
-    the real error at the bottom of the log.
-    """
+    """A failed startup must raise the failing step's exception, not a teardown one."""
 
     async def failing_create_tables() -> None:
         raise RuntimeError("db unreachable")
