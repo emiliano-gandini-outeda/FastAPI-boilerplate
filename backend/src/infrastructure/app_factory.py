@@ -2,7 +2,7 @@ import json
 import logging
 from asyncio import Event
 from collections.abc import AsyncGenerator, Callable
-from contextlib import AbstractAsyncContextManager, asynccontextmanager
+from contextlib import AbstractAsyncContextManager, AsyncExitStack, asynccontextmanager
 from typing import Any
 
 import anyio
@@ -53,30 +53,24 @@ def lifespan_factory(
 
         await set_threadpool_tokens()
 
-        try:
+        async with AsyncExitStack() as teardown:
             if isinstance(settings, DatabaseSettings) and create_tables_on_startup:
                 await create_tables()
 
             if isinstance(settings, CacheSettings) and settings.CACHE_ENABLED:
                 await initialize_cache()
+                teardown.push_async_callback(close_cache)
 
             if isinstance(settings, RateLimiterSettings) and settings.RATE_LIMITER_ENABLED:
                 await initialize_rate_limiter()
+                teardown.push_async_callback(close_rate_limiter)
 
+            teardown.push_async_callback(auth.shutdown)
             await auth.initialize()
 
             initialization_complete.set()
 
             yield
-
-        finally:
-            await auth.shutdown()
-
-            if isinstance(settings, CacheSettings) and settings.CACHE_ENABLED:
-                await close_cache()
-
-            if isinstance(settings, RateLimiterSettings) and settings.RATE_LIMITER_ENABLED:
-                await close_rate_limiter()
 
     return lifespan
 
